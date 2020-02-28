@@ -5,6 +5,7 @@ function usage {
 	exit 1
 }
 
+DEBUG_SCRIPT=TRUE
 function runcommand {
 	if [ "X$DEBUG_SCRIPT" != "X" ]; then
 		$1
@@ -54,13 +55,13 @@ if [ $SCALE -eq 1 ]; then
 fi
 
 # Do the actual data load.
-hdfs dfs -mkdir -p ${DIR}
-hdfs dfs -ls ${DIR}/${SCALE} > /dev/null
+hadoop fs -mkdir -p ${DIR}
+hadoop fs -ls ${DIR}/${SCALE} > /dev/null
 if [ $? -ne 0 ]; then
 	echo "Generating data at scale factor $SCALE."
 	(cd tpcds-gen; hadoop jar target/*.jar -d ${DIR}/${SCALE}/ -s ${SCALE})
 fi
-hdfs dfs -ls ${DIR}/${SCALE} > /dev/null
+hadoop fs -ls ${DIR}/${SCALE} > /dev/null
 if [ $? -ne 0 ]; then
 	echo "Data generation failed, exiting."
 	exit 1
@@ -68,9 +69,13 @@ fi
 
 hadoop fs -chmod -R 777  ${DIR}/${SCALE}
 
+echo "Loading data into mapr"
+
+hadoop distcp hdfs://${DIR}/${SCALE} maprfs://${DIR}/${SCALE}
+
 echo "TPC-DS text data generation complete."
 
-HIVE="beeline -n hive -u 'jdbc:hive2://localhost:2181/;serviceDiscoveryMode=zooKeeper;zooKeeperNamespace=hiveserver2?tez.queue.name=default' "
+HIVE="hive --service beeline -n mapr -u 'jdbc:hive2://ip-10-240-1-143.ec2.internal:10000/default;' "
 
 # Create the text/flat tables as external tables. These will be later be converted to ORCFile.
 echo "Loading text data into external tables."
